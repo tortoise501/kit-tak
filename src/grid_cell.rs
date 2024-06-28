@@ -1,72 +1,94 @@
+use bevy::{math::vec3, prelude::*};
 
-
-trait Cell{
-    fn get_state(&self)->CellState;
-    fn set_state(&mut self,state:CellState);
-}
-
-#[derive(Clone, Copy)]
-enum CellState {
+#[derive(Component, Clone, Copy)]
+pub enum CellState {
     X,
-    O
+    O,
 }
 
-struct SmallCell(CellState);
-impl Cell for SmallCell {
-    fn get_state(&self) -> CellState{
-        self.0
-    }
+#[derive(Component)]
+pub struct Grid;
 
-    fn set_state(&mut self,state:CellState) {
-        self.0 = state;
-    }
+#[derive(Bundle)]
+pub struct GridBundle{
+    grid: Grid,
+    obj:SpatialBundle
 }
-
-trait Grid {
-    fn get_cell_state(&self,index:usize)->CellState;
-    fn occupy_cell(&mut self,index:usize,state:CellState);
-    fn verify_grid(&self) -> Option<CellState>;
-}
-
-struct BigGrid([Box<dyn Cell>;9]);
-
-impl Grid for BigGrid {
-    fn get_cell_state(&self,index:usize)->CellState {
-        self.0[index].get_state()
-    }
-
-    fn occupy_cell(&mut self,index:usize,state:CellState) {
-        self.0[index].set_state(state)
-    }
-
-    fn verify_grid(&self) -> Option<CellState> {
-        todo!()
+impl GridBundle {
+    fn from_ivec2(pos:IVec2)->GridBundle{
+        GridBundle{
+            grid: Grid,
+            obj: SpatialBundle{
+                transform: Transform::from_translation(Vec3 {
+                    x: pos.x as f32 * 300.,
+                    y: pos.y as f32 * 300.,
+                    z: 0.,
+                }),
+                ..default()
+            },
+        }
     }
 }
 
-struct GridCell{
-    cell: Box<dyn Cell>,
-    grid: Box<dyn Grid>,
+
+#[derive(Component)]
+pub struct Cell {
+    pos: IVec2,
 }
-impl Cell for GridCell{
-    fn get_state(&self)->CellState {
-        self.cell.get_state()
-    }
 
-    fn set_state(&mut self,state:CellState) {
-        self.cell.set_state(state)
+#[derive(Bundle)]
+pub struct CellBundle {
+    cell: Cell,
+    sprite: SpriteBundle,
+}
+impl CellBundle {
+    fn from_ivec2(pos: IVec2, asset_server: &Res<AssetServer>) -> CellBundle {
+        CellBundle {
+            cell: Cell { pos },
+            sprite: SpriteBundle {
+                transform: Transform::from_translation(Vec3 {
+                    x: pos.x as f32 * 100.,
+                    y: pos.y as f32 * 100.,
+                    z: 0.,
+                }),
+                texture: asset_server.load("cell_X.png"),
+                ..default()
+            },
+        }
     }
 }
-impl Grid for GridCell {
-    fn get_cell_state(&self,index:usize)->CellState {
-        self.grid.get_cell_state(index)
-    }
 
-    fn occupy_cell(&mut self,index:usize,state:CellState) {
-        self.grid.occupy_cell(index, state)
+pub fn spawn_grid(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let grid: Entity = commands.spawn((GridBundle::from_ivec2(IVec2 { x: 0, y: 0 }))).id();
+    for i in 0..=8 {
+        info!("adding grid_cell: {}",i);
+        let pos = IVec2 {
+            x: (i % 3) - 1,
+            y: i / 3 - 1,
+        };
+        let cell_grid = commands.spawn((
+            GridBundle::from_ivec2(pos),
+            Cell {
+                pos,
+            }
+        )).id();
+        commands.entity(grid).add_child(cell_grid);
+        for j in 0..=8 {
+            info!("     adding cell {}",j);
+            let cell = commands.spawn(CellBundle::from_ivec2(
+                IVec2 {
+                    x: (j % 3) - 1,
+                    y: j / 3 - 1,
+                },
+                &asset_server,
+            )).id();
+            commands.entity(cell_grid).add_child(cell);
+        }
     }
+}
 
-    fn verify_grid(&self) -> Option<CellState> {
-        self.grid.verify_grid()
+pub fn check_cells(query: Query<&Transform,With<Cell>>){
+    for transform in &query{
+        info!("cell here: {:?}",transform.translation);
     }
 }
