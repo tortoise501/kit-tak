@@ -4,9 +4,9 @@ use std::cell::Cell;
 
 use bevy::{pbr::deferred, prelude::*, transform::commands};
 use camera::CameraPlugin;
-use grid_cell::*;
+use grid_cell::CellGridPlugin;
 
 fn main() {
-    let _app = App::new().add_plugins((DefaultPlugins,CameraPlugin)).add_systems(Startup, (spawn_grid,check_cells).chain()).run();
+    let _app = App::new().add_plugins((DefaultPlugins,CameraPlugin,CellGridPlugin)).run();
 }
 

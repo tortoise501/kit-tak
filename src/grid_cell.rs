@@ -1,94 +1,178 @@
-use bevy::{math::vec3, prelude::*};
+use bevy::{math::vec3, prelude::*, window::PrimaryWindow};
+
+pub struct  CellGridPlugin;
+
+impl Plugin for CellGridPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, (initialize_cell_creator,spawn_grid,check_cells).chain())
+            .add_systems(Update, (update_cell_textures,handle_mouse_clicks));
+    }
+}
+
 
 #[derive(Component, Clone, Copy)]
-pub enum CellState {
+enum CellState {
     X,
     O,
+    Empty
 }
 
 #[derive(Component)]
-pub struct Grid;
+struct Grid;
+
+#[derive(Component)]
+struct MainGrid;
 
 #[derive(Bundle)]
-pub struct GridBundle{
+struct GridBundle{
     grid: Grid,
-    obj:SpatialBundle
+    obj: SpriteBundle
 }
-impl GridBundle {
-    fn from_ivec2(pos:IVec2)->GridBundle{
-        GridBundle{
-            grid: Grid,
-            obj: SpatialBundle{
-                transform: Transform::from_translation(Vec3 {
-                    x: pos.x as f32 * 300.,
-                    y: pos.y as f32 * 300.,
-                    z: 0.,
-                }),
-                ..default()
-            },
-        }
-    }
-}
-
 
 #[derive(Component)]
-pub struct Cell {
+struct Cell {
     pos: IVec2,
+    state: CellState,
 }
 
+#[derive(Component)]
+struct UpdateState(bool);
+
 #[derive(Bundle)]
-pub struct CellBundle {
+struct CellBundle {
     cell: Cell,
     sprite: SpriteBundle,
-}
-impl CellBundle {
-    fn from_ivec2(pos: IVec2, asset_server: &Res<AssetServer>) -> CellBundle {
-        CellBundle {
-            cell: Cell { pos },
-            sprite: SpriteBundle {
-                transform: Transform::from_translation(Vec3 {
-                    x: pos.x as f32 * 100.,
-                    y: pos.y as f32 * 100.,
-                    z: 0.,
-                }),
-                texture: asset_server.load("cell_X.png"),
-                ..default()
-            },
-        }
-    }
+    update_state:UpdateState
 }
 
-pub fn spawn_grid(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let grid: Entity = commands.spawn((GridBundle::from_ivec2(IVec2 { x: 0, y: 0 }))).id();
-    for i in 0..=8 {
-        info!("adding grid_cell: {}",i);
+fn spawn_grid(mut commands: Commands, cell_spawner:Res<CellCreator>) {
+    let grid: Entity = commands.spawn( (cell_spawner.new_grid(IVec2 { x: 0, y: 0 }),MainGrid)).id();
+    for grid_id in 0..=8 {
+        info!("adding grid_cell: {}",grid_id);
         let pos = IVec2 {
-            x: (i % 3) - 1,
-            y: i / 3 - 1,
+            x: (grid_id % 3) - 1,
+            y: grid_id / 3 - 1,
         };
         let cell_grid = commands.spawn((
-            GridBundle::from_ivec2(pos),
+            cell_spawner.new_grid(pos),
             Cell {
                 pos,
+                state: CellState::Empty
             }
         )).id();
         commands.entity(grid).add_child(cell_grid);
-        for j in 0..=8 {
-            info!("     adding cell {}",j);
-            let cell = commands.spawn(CellBundle::from_ivec2(
-                IVec2 {
-                    x: (j % 3) - 1,
-                    y: j / 3 - 1,
-                },
-                &asset_server,
-            )).id();
+        for cell_id in 0..=8 {
+            info!("     adding cell {}",cell_id);
+            let pos = IVec2 {
+                x: (cell_id % 3) - 1,
+                y: cell_id / 3 - 1,
+            };
+            let cell = commands.spawn(cell_spawner.new_cell(CellState::Empty, pos)).id();
             commands.entity(cell_grid).add_child(cell);
         }
     }
 }
 
-pub fn check_cells(query: Query<&Transform,With<Cell>>){
+fn check_cells(query: Query<&Transform,With<Cell>>,mut main_grid_q:Query<&mut Sprite,With<MainGrid>>){
     for transform in &query{
         info!("cell here: {:?}",transform.translation);
+    }
+    let mut sprite = main_grid_q.single_mut();
+    sprite.custom_size = Some(Vec2{x:900.,y:900.});
+}
+
+fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut UpdateState)>,cell_spawner:Res<CellCreator>){
+    for (mut texture,cell,mut update) in &mut cell_query{
+        if update.0 {
+            *texture = cell_spawner.get_texture(cell.state);
+            update.0 = false;
+        }
+    }
+}
+
+fn initialize_cell_creator(asset_server:Res<AssetServer>,mut commands: Commands){
+    commands.insert_resource(CellCreator::new(&asset_server));
+}
+#[derive(Resource)]
+struct CellCreator{
+    x_texture:Handle<Image>,
+    o_texture:Handle<Image>,
+    empty_texture:Handle<Image>,
+    grid_texture:Handle<Image>
+}
+
+impl CellCreator {
+    fn get_texture(&self,state:CellState) -> Handle<Image> {
+        match state {
+            CellState::X => self.x_texture.clone(),
+            CellState::O => self.o_texture.clone(),
+            CellState::Empty => self.empty_texture.clone(),
+        }
+    }
+    fn new(asset_server: &Res<AssetServer>) -> CellCreator{
+        CellCreator{
+            x_texture: asset_server.load("cell_X.png"),
+            o_texture: asset_server.load("cell_O.png"),
+            empty_texture: asset_server.load("cell_empty.png"),
+            grid_texture: asset_server.load("grid.png"),
+        }
+    }
+    fn new_cell(&self,state:CellState,pos:IVec2)-> CellBundle{
+        CellBundle {
+            cell: Cell { pos,state:CellState::Empty},
+            sprite: SpriteBundle {
+                transform: Transform::from_translation(Vec3 {
+                    x: pos.x as f32 * 100.,
+                    y: pos.y as f32 * 100.,
+                    z: -1.,
+                }),
+                texture: match state {
+                    CellState::X => self.x_texture.clone(),
+                    CellState::O => self.o_texture.clone(),
+                    CellState::Empty => self.empty_texture.clone(),
+                },
+                ..default()
+            },
+            update_state:UpdateState(false)
+        }
+    }
+    fn new_grid(&self,pos:IVec2)->GridBundle{
+        GridBundle{
+            grid: Grid,
+            obj: SpriteBundle{
+                transform: Transform::from_translation(Vec3 {
+                    x: pos.x as f32 * 300.,
+                    y: pos.y as f32 * 300.,
+                    z: -1.,
+                }),
+                texture: self.grid_texture.clone(),
+                ..default()
+            },
+        }
+    }
+}
+
+fn handle_mouse_clicks(
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut cell_q: Query<(&mut Cell,&mut UpdateState,&GlobalTransform),Without<Grid>>
+) {
+    let win = window_query.get_single().unwrap();
+    let (camera, camera_transform) = camera_q.single();
+    if mouse_input.just_pressed(MouseButton::Left) {
+        println!("click at {:?}", win.cursor_position());
+        if let Some(world_position) = win
+                .cursor_position()
+                .and_then(|cursor| camera.viewport_to_world_2d(camera_transform, cursor))
+        {
+            println!("click at world {:?}", world_position);
+            for (mut cell, mut update, transform) in &mut cell_q{
+                if (transform.translation().x - world_position.x).abs() < 45. && (transform.translation().y - world_position.y).abs() < 45. {
+                    update.0 = true;
+                    cell.state = CellState::O;
+                }
+            }
+        }
     }
 }
