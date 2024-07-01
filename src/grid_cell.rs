@@ -5,20 +5,20 @@ pub struct  CellGridPlugin;
 impl Plugin for CellGridPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (initialize_cell_creator,spawn_grid,check_cells).chain())
-            .add_systems(Update, (update_cell_textures,handle_mouse_clicks));
+            .add_systems(Update, (update_cell_textures));
     }
 }
 
 
-#[derive(Component, Clone, Copy)]
-enum CellState {
+#[derive(Component, Clone, Copy,Debug,PartialEq,Eq)]
+pub enum CellState {
     X,
     O,
     Empty
 }
 
 #[derive(Component)]
-struct Grid;
+pub struct Grid;
 
 #[derive(Component)]
 struct MainGrid;
@@ -30,13 +30,14 @@ struct GridBundle{
 }
 
 #[derive(Component)]
-struct Cell {
-    pos: IVec2,
-    state: CellState,
+pub struct Cell {
+    pub pos: IVec2,
+    pub grid_pos:Option<IVec2>,
+    pub state: CellState,
 }
 
 #[derive(Component)]
-struct UpdateState(bool);
+pub struct UpdateState(pub bool);
 
 #[derive(Bundle)]
 struct CellBundle {
@@ -49,14 +50,15 @@ fn spawn_grid(mut commands: Commands, cell_spawner:Res<CellCreator>) {
     let grid: Entity = commands.spawn( (cell_spawner.new_grid(IVec2 { x: 0, y: 0 }),MainGrid)).id();
     for grid_id in 0..=8 {
         info!("adding grid_cell: {}",grid_id);
-        let pos = IVec2 {
+        let grid_pos = IVec2 {
             x: (grid_id % 3) - 1,
             y: grid_id / 3 - 1,
         };
         let cell_grid = commands.spawn((
-            cell_spawner.new_grid(pos),
+            cell_spawner.new_grid(grid_pos),
             Cell {
-                pos,
+                grid_pos:None,
+                pos: grid_pos,
                 state: CellState::Empty
             }
         )).id();
@@ -67,7 +69,7 @@ fn spawn_grid(mut commands: Commands, cell_spawner:Res<CellCreator>) {
                 x: (cell_id % 3) - 1,
                 y: cell_id / 3 - 1,
             };
-            let cell = commands.spawn(cell_spawner.new_cell(CellState::Empty, pos)).id();
+            let cell = commands.spawn(cell_spawner.new_cell(CellState::Empty, pos,Some(grid_pos))).id();
             commands.entity(cell_grid).add_child(cell);
         }
     }
@@ -117,9 +119,9 @@ impl CellCreator {
             grid_texture: asset_server.load("grid.png"),
         }
     }
-    fn new_cell(&self,state:CellState,pos:IVec2)-> CellBundle{
+    fn new_cell(&self,state:CellState,pos:IVec2,grid_pos:Option<IVec2>)-> CellBundle{
         CellBundle {
-            cell: Cell { pos,state:CellState::Empty},
+            cell: Cell { pos,grid_pos,state:CellState::Empty},
             sprite: SpriteBundle {
                 transform: Transform::from_translation(Vec3 {
                     x: pos.x as f32 * 100.,
@@ -148,31 +150,6 @@ impl CellCreator {
                 texture: self.grid_texture.clone(),
                 ..default()
             },
-        }
-    }
-}
-
-fn handle_mouse_clicks(
-    mouse_input: Res<ButtonInput<MouseButton>>,
-    camera_q: Query<(&Camera, &GlobalTransform), With<Camera>>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-    mut cell_q: Query<(&mut Cell,&mut UpdateState,&GlobalTransform),Without<Grid>>
-) {
-    let win = window_query.get_single().unwrap();
-    let (camera, camera_transform) = camera_q.single();
-    if mouse_input.just_pressed(MouseButton::Left) {
-        println!("click at {:?}", win.cursor_position());
-        if let Some(world_position) = win
-                .cursor_position()
-                .and_then(|cursor| camera.viewport_to_world_2d(camera_transform, cursor))
-        {
-            println!("click at world {:?}", world_position);
-            for (mut cell, mut update, transform) in &mut cell_q{
-                if (transform.translation().x - world_position.x).abs() < 45. && (transform.translation().y - world_position.y).abs() < 45. {
-                    update.0 = true;
-                    cell.state = CellState::O;
-                }
-            }
         }
     }
 }
