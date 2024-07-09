@@ -1,4 +1,5 @@
 use bevy::{math::vec3, prelude::*, window::PrimaryWindow};
+use serde::{Deserialize, Serialize};
 
 pub struct  CellGridPlugin;
 
@@ -9,7 +10,7 @@ impl Plugin for CellGridPlugin {
     }
 }
 
-#[derive(Component, Clone, Copy,Debug,PartialEq,Eq)]
+#[derive(Component, Clone, Copy,Debug,PartialEq,Eq,serde::Serialize,serde::Deserialize)]
 pub enum CellState {
     X,
     O,
@@ -28,7 +29,7 @@ struct GridBundle{
     obj: SpriteBundle
 }
 
-#[derive(Component)]
+#[derive(Component,Serialize,Deserialize,Clone)]
 pub struct Cell {
     /// Position relative to grid center 
     pub pos: IVec2,
