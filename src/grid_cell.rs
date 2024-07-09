@@ -9,7 +9,6 @@ impl Plugin for CellGridPlugin {
     }
 }
 
-
 #[derive(Component, Clone, Copy,Debug,PartialEq,Eq)]
 pub enum CellState {
     X,
@@ -19,7 +18,7 @@ pub enum CellState {
 
 #[derive(Component)]
 pub struct Grid;
-
+/// Root grid
 #[derive(Component)]
 struct MainGrid;
 
@@ -31,11 +30,15 @@ struct GridBundle{
 
 #[derive(Component)]
 pub struct Cell {
+    /// Position relative to grid center 
     pub pos: IVec2,
+    /// grid positon relative to root grid center
     pub grid_pos:Option<IVec2>,
+    /// Current cell state (X, O or empty)
     pub state: CellState,
 }
 
+/// True if cell texture must be updated
 #[derive(Component)]
 pub struct UpdateState(pub bool);
 
@@ -43,10 +46,12 @@ pub struct UpdateState(pub bool);
 struct CellBundle {
     cell: Cell,
     sprite: SpriteBundle,
+    /// Update texture flag
     update_state:UpdateState
 }
 
-fn spawn_grid(mut commands: Commands, cell_spawner:Res<CellCreator>) {
+/// Spawns all needed Entities
+fn spawn_grid(mut commands: Commands, cell_spawner:Res<GridCellCreator>) {
     let grid: Entity = commands.spawn( (cell_spawner.new_grid(IVec2 { x: 0, y: 0 }),MainGrid)).id();
     for grid_id in 0..=8 {
         info!("adding grid_cell: {}",grid_id);
@@ -75,6 +80,7 @@ fn spawn_grid(mut commands: Commands, cell_spawner:Res<CellCreator>) {
     }
 }
 
+/// Debug stuff + main grid sprite resize
 fn check_cells(query: Query<&Transform,With<Cell>>,mut main_grid_q:Query<&mut Sprite,With<MainGrid>>){
     for transform in &query{
         info!("cell here: {:?}",transform.translation);
@@ -83,7 +89,8 @@ fn check_cells(query: Query<&Transform,With<Cell>>,mut main_grid_q:Query<&mut Sp
     sprite.custom_size = Some(Vec2{x:900.,y:900.});
 }
 
-fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut UpdateState)>,cell_spawner:Res<CellCreator>){
+/// Updates cells flagged with update flag
+fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut UpdateState)>,cell_spawner:Res<GridCellCreator>){
     for (mut texture,cell,mut update) in &mut cell_query{
         if update.0 {
             *texture = cell_spawner.get_texture(cell.state);
@@ -91,19 +98,21 @@ fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut Upd
         }
     }
 }
-
+/// Creates resource used to spawn cells more efficiently 
 fn initialize_cell_creator(asset_server:Res<AssetServer>,mut commands: Commands){
-    commands.insert_resource(CellCreator::new(&asset_server));
+    commands.insert_resource(GridCellCreator::new(&asset_server));
 }
+
+/// Creates cells and grids 
 #[derive(Resource)]
-struct CellCreator{
+struct GridCellCreator{
     x_texture:Handle<Image>,
     o_texture:Handle<Image>,
     empty_texture:Handle<Image>,
     grid_texture:Handle<Image>
 }
 
-impl CellCreator {
+impl GridCellCreator {
     fn get_texture(&self,state:CellState) -> Handle<Image> {
         match state {
             CellState::X => self.x_texture.clone(),
@@ -111,8 +120,8 @@ impl CellCreator {
             CellState::Empty => self.empty_texture.clone(),
         }
     }
-    fn new(asset_server: &Res<AssetServer>) -> CellCreator{
-        CellCreator{
+    fn new(asset_server: &Res<AssetServer>) -> GridCellCreator{
+        GridCellCreator{
             x_texture: asset_server.load("cell_X.png"),
             o_texture: asset_server.load("cell_O.png"),
             empty_texture: asset_server.load("cell_empty.png"),
