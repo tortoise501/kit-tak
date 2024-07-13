@@ -1,4 +1,4 @@
-use bevy::{math::vec3, prelude::*, window::PrimaryWindow};
+use bevy::{ecs::query, math::vec3, prelude::*, window::PrimaryWindow};
 use serde::{Deserialize, Serialize};
 
 pub struct  CellGridPlugin;
@@ -6,7 +6,7 @@ pub struct  CellGridPlugin;
 impl Plugin for CellGridPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (initialize_cell_creator,spawn_grid,check_cells).chain())
-            .add_systems(Update, (update_cell_textures));
+            .add_systems(Update, (update_cell_textures,update_gridcells));
     }
 }
 
@@ -82,9 +82,12 @@ fn spawn_grid(mut commands: Commands, cell_spawner:Res<GridCellCreator>) {
 }
 
 /// Debug stuff + main grid sprite resize
-fn check_cells(query: Query<&Transform,With<Cell>>,mut main_grid_q:Query<&mut Sprite,With<MainGrid>>){
+fn check_cells(query: Query<&Transform,With<Cell>>,mut grid_q: Query<&mut Sprite,(With<Grid>,Without<MainGrid>)>,mut main_grid_q:Query<&mut Sprite,With<MainGrid>>){
     for transform in &query{
         info!("cell here: {:?}",transform.translation);
+    }
+    for mut sprite in &mut grid_q{
+        sprite.custom_size = Some(Vec2 { x: 300., y: 300. });
     }
     let mut sprite = main_grid_q.single_mut();
     sprite.custom_size = Some(Vec2{x:900.,y:900.});
@@ -99,6 +102,69 @@ fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut Upd
         }
     }
 }
+
+fn update_gridcells(
+    mut gridcells_q: Query<(Entity,&mut Cell,&Children),With<Grid>>,
+    cell_q: Query<&Cell,Without<Grid>>,
+    mut commands: Commands,
+    // mut main_grid: Query<(&Grid,&Children),With<MainGrid>>,
+){
+    for (grid,mut cell, children) in &mut gridcells_q {
+        if cell.state != CellState::Empty {
+            continue;
+        }
+        let mut state_map = [[CellState::Empty;3];3];
+        for child in children {
+            let cell = cell_q.get(*child);
+            if let Ok(cell) = cell{
+                state_map[(cell.pos.x + 1) as usize][(cell.pos.y + 1) as usize] = cell.state;
+            }
+        }
+        for i in 0..3 {
+            if cell.state != CellState::Empty {
+                commands.entity(grid).insert(UpdateState(true));
+                // commands.entity(grid).remove::<Grid>();
+                info!("well idk something");
+                break;
+            }
+
+            let mut vertical_count = (0,state_map[i][0]);
+            let mut horizontal_count = (0,state_map[0][i]);
+            let mut diagonal_count = (0,state_map[1][1]);
+            let mut diagonal_count_rev = (0,state_map[1][1]);
+
+            for j in 0..3 {
+                if state_map[i][j] != CellState::Empty && state_map[i][j] == vertical_count.1 {
+                    vertical_count.0 +=1;
+                }
+                if state_map[j][i] != CellState::Empty && state_map[j][i] == horizontal_count.1 {
+                    horizontal_count.0 +=1;
+                }
+                if state_map[j][j] != CellState::Empty && state_map[j][j] == diagonal_count.1 {
+                    diagonal_count.0 +=1;
+                }
+                if state_map[2-j][2-j] != CellState::Empty && state_map[2-j][2-j] == diagonal_count_rev.1 {
+                    diagonal_count_rev.0 +=1;
+                }
+            }
+            if vertical_count.0 == 3 {
+                cell.state = vertical_count.1;
+            }
+            else if horizontal_count.0 == 3 {
+                cell.state = horizontal_count.1;
+            }
+            else if diagonal_count.0 == 3 {
+                cell.state = diagonal_count.1;
+            }
+            else if diagonal_count_rev.0 == 3 {
+                cell.state = diagonal_count_rev.1;
+            }
+        }
+    }
+}
+
+
+
 /// Creates resource used to spawn cells more efficiently 
 fn initialize_cell_creator(asset_server:Res<AssetServer>,mut commands: Commands){
     commands.insert_resource(GridCellCreator::new(&asset_server));
