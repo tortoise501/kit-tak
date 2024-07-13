@@ -14,6 +14,7 @@ impl Plugin for ServerPlugin {
     }
 }
 
+/// Starts listening for connection
 fn start_listening(mut server: ResMut<QuinnetServer>) {
     server
         .start_endpoint(
@@ -24,9 +25,9 @@ fn start_listening(mut server: ResMut<QuinnetServer>) {
         .unwrap();
 }
 
+/// Here server just broadcasts messages it gets
 fn handle_client_messages(
     mut server: ResMut<QuinnetServer>,
-    /*...*/
 ) {
     let mut endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {

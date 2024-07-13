@@ -32,7 +32,7 @@ impl Plugin for ClientPlugin {
 #[derive(Resource,Clone, Copy)]
 struct ThisPlayer(CellState);
 
-
+/// Handles mouse click input updating events to send queue by adding cell that was clicked
 fn handle_mouse_clicks(
     mouse_input: Res<ButtonInput<MouseButton>>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera>>,
@@ -89,6 +89,7 @@ impl CurrentPlayer {
 #[derive(Resource)]
 struct AvailableGrid(Option<IVec2>);
 
+/// Prevents situations when player doesn't have valid cells to click because grid is filled
 fn prevent_available_grid_lock (
     grid_cell_q:Query<(&Children,&Cell),(With<Grid>,With<Cell>)>,
     cell_q:Query<(Entity,&Cell)>,
@@ -116,7 +117,9 @@ fn prevent_available_grid_lock (
     }
 }
 
-
+/// Occupies cells if they are in received events queue
+/// 
+/// It is actually an event handler but there no events other then ClickedCell 
 fn occupy_cell (
     mut cell_q: Query<(&mut Cell, &mut UpdateState), Without<Grid>>,
     mut available_grid:ResMut<AvailableGrid>,
@@ -152,7 +155,7 @@ fn occupy_cell (
 
 
 
-
+/// Start connection with server
 fn start_connection(mut client: ResMut<QuinnetClient>) {
     let _ = client
         .open_connection(
@@ -168,6 +171,7 @@ fn start_connection(mut client: ResMut<QuinnetClient>) {
     
 }
 
+/// Sends messages from event queue to server
 fn send_messages_to_server(mut client: ResMut<QuinnetClient>,mut messages:ResMut<SendEventQueue>){
     while messages.0.len() > 0 {
         if let Some(message) = messages.0.pop_front() {
@@ -176,7 +180,7 @@ fn send_messages_to_server(mut client: ResMut<QuinnetClient>,mut messages:ResMut
         }
     }
 }
-
+/// Receives messages from server and puts them in receive queue
 fn receive_server_messages(
     mut client: ResMut<QuinnetClient>,
     mut received_event_queue: ResMut<ReceiveEventQueue>,

@@ -15,7 +15,7 @@ use network::client::ClientPlugin;
 
 
 fn main() {
-
+    // debug things for server creation
     let args = std::env::args().collect::<Vec<String>>();
     let username = &args[1];
 

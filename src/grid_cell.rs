@@ -114,6 +114,7 @@ struct GridCellCreator{
 }
 
 impl GridCellCreator {
+    /// Get texture for cell state
     fn get_texture(&self,state:CellState) -> Handle<Image> {
         match state {
             CellState::X => self.x_texture.clone(),
@@ -121,6 +122,7 @@ impl GridCellCreator {
             CellState::Empty => self.empty_texture.clone(),
         }
     }
+    /// Creates new GridCellCreator
     fn new(asset_server: &Res<AssetServer>) -> GridCellCreator{
         GridCellCreator{
             x_texture: asset_server.load("cell_X.png"),
@@ -129,6 +131,7 @@ impl GridCellCreator {
             grid_texture: asset_server.load("grid.png"),
         }
     }
+    /// Creates CellBundle 
     fn new_cell(&self,state:CellState,pos:IVec2,grid_pos:Option<IVec2>)-> CellBundle{
         CellBundle {
             cell: Cell { pos,grid_pos,state:CellState::Empty},
@@ -148,6 +151,8 @@ impl GridCellCreator {
             update_state:UpdateState(false)
         }
     }
+
+    /// Creates GridBundle
     fn new_grid(&self,pos:IVec2)->GridBundle{
         GridBundle{
             grid: Grid,
