@@ -1,4 +1,5 @@
 use bevy::{prelude::*, transform};
+use bevy_lunex::prelude::MainUi;
 
 pub struct CameraPlugin;
 
@@ -9,8 +10,11 @@ impl Plugin for CameraPlugin {
 }
 
 fn add_camera(mut commands: Commands){
-    commands.spawn(Camera2dBundle{
+    commands.spawn(
+        (
+        MainUi,
+        Camera2dBundle{
         transform: Transform::from_xyz(0., 0., 10.),
         ..default()
-    });
+    }));
 }
