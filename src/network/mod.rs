@@ -20,3 +20,15 @@ pub struct ReceiveEventQueue(pub VecDeque<GameEvent>);
 pub enum GameEvent {
     ClickedCell(Cell),
 }
+
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum StartClient{
+    /// Don't start client
+    None,
+    /// Attempted to start but couldn't use given ip address
+    IncorrectAddress,
+    /// Start as client and connect to given address
+    Client(Ipv4Addr),
+    /// Start as server
+    Server
+}

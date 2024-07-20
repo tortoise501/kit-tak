@@ -20,7 +20,7 @@ fn main() {
     // debug things for server creation
     let args = std::env::args().collect::<Vec<String>>();
     // let username = &args[1];
-    let _app = App::new().add_plugins((DefaultPlugins,CameraPlugin,MenuPlugin)).run();
+    let _app = App::new().insert_state(GameState::InMenu).add_plugins((DefaultPlugins,CameraPlugin,MenuPlugin,CellGridPlugin,ClientPlugin,ServerPlugin)).run();
     // if username == "serv" {
     //     let _app = App::new().add_plugins((DefaultPlugins,CameraPlugin,CellGridPlugin,ClientPlugin::new(grid_cell::CellState::O),ServerPlugin)).run();
     // } else {
@@ -30,3 +30,12 @@ fn main() {
 }
 
 
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GameState{
+    InMenu,
+    CreatingServer,
+    Connecting,
+    StartingGame,
+    InGame,
+    //...TODO
+}

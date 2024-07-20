@@ -1,12 +1,13 @@
 use bevy::{ecs::query, math::vec3, prelude::*, window::PrimaryWindow};
 use serde::{Deserialize, Serialize};
+use crate::GameState;
 
 pub struct  CellGridPlugin;
 
 impl Plugin for CellGridPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, (initialize_cell_creator,spawn_grid,check_cells).chain())
-            .add_systems(Update, (update_cell_textures,update_gridcells));
+        app.add_systems(Update, (initialize_cell_creator,spawn_grid,finish_grid_initializing).chain().run_if(in_state(GameState::StartingGame)))
+            .add_systems(Update, (update_cell_textures,validate_gridcells).run_if(in_state(GameState::InGame)));
     }
 }
 
@@ -14,7 +15,8 @@ impl Plugin for CellGridPlugin {
 pub enum CellState {
     X,
     O,
-    Empty
+    Empty,
+    Completed
 }
 
 #[derive(Component)]
@@ -53,6 +55,7 @@ struct CellBundle {
 
 /// Spawns all needed Entities
 fn spawn_grid(mut commands: Commands, cell_spawner:Res<GridCellCreator>) {
+    info!("spawning grid");
     let grid: Entity = commands.spawn( (cell_spawner.new_grid(IVec2 { x: 0, y: 0 }),MainGrid)).id();
     for grid_id in 0..=8 {
         info!("adding grid_cell: {}",grid_id);
@@ -82,7 +85,13 @@ fn spawn_grid(mut commands: Commands, cell_spawner:Res<GridCellCreator>) {
 }
 
 /// Debug stuff + main grid sprite resize
-fn check_cells(query: Query<&Transform,With<Cell>>,mut grid_q: Query<&mut Sprite,(With<Grid>,Without<MainGrid>)>,mut main_grid_q:Query<&mut Sprite,With<MainGrid>>){
+fn finish_grid_initializing(
+    query: Query<&Transform,With<Cell>>,
+    mut grid_q: Query<&mut Sprite,(With<Grid>,Without<MainGrid>)>,
+    mut main_grid_q:Query<&mut Sprite,With<MainGrid>>,
+    mut next_game_stat: ResMut<NextState<GameState>>,
+){
+    info!("finishing grid creation");
     for transform in &query{
         info!("cell here: {:?}",transform.translation);
     }
@@ -91,6 +100,7 @@ fn check_cells(query: Query<&Transform,With<Cell>>,mut grid_q: Query<&mut Sprite
     }
     let mut sprite = main_grid_q.single_mut();
     sprite.custom_size = Some(Vec2{x:900.,y:900.});
+    next_game_stat.set(GameState::InGame);
 }
 
 /// Updates cells flagged with update flag
@@ -103,7 +113,7 @@ fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut Upd
     }
 }
 
-fn update_gridcells(
+fn validate_gridcells(
     mut gridcells_q: Query<(Entity,&mut Cell,&Children),With<Grid>>,
     cell_q: Query<&Cell,Without<Grid>>,
     mut commands: Commands,
@@ -143,7 +153,7 @@ fn update_gridcells(
                 if state_map[j][j] != CellState::Empty && state_map[j][j] == diagonal_count.1 {
                     diagonal_count.0 +=1;
                 }
-                if state_map[2-j][2-j] != CellState::Empty && state_map[2-j][2-j] == diagonal_count_rev.1 {
+                if state_map[j][2-j] != CellState::Empty && state_map[j][2-j] == diagonal_count_rev.1 {
                     diagonal_count_rev.0 +=1;
                 }
             }
@@ -160,6 +170,11 @@ fn update_gridcells(
                 cell.state = diagonal_count_rev.1;
             }
         }
+        if cell.state != CellState::Empty{
+            for child in children {
+                commands.entity(*child).despawn();
+            }
+        }
     }
 }
 
@@ -167,6 +182,7 @@ fn update_gridcells(
 
 /// Creates resource used to spawn cells more efficiently 
 fn initialize_cell_creator(asset_server:Res<AssetServer>,mut commands: Commands){
+    info!("initializing cell creator");
     commands.insert_resource(GridCellCreator::new(&asset_server));
 }
 
@@ -186,6 +202,7 @@ impl GridCellCreator {
             CellState::X => self.x_texture.clone(),
             CellState::O => self.o_texture.clone(),
             CellState::Empty => self.empty_texture.clone(),
+            CellState::Completed => self.empty_texture.clone(),
         }
     }
     /// Creates new GridCellCreator
@@ -211,6 +228,8 @@ impl GridCellCreator {
                     CellState::X => self.x_texture.clone(),
                     CellState::O => self.o_texture.clone(),
                     CellState::Empty => self.empty_texture.clone(),
+                    CellState::Completed => self.empty_texture.clone(),
+                    
                 },
                 ..default()
             },

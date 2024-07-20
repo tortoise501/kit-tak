@@ -1,32 +1,27 @@
 use std::{collections::VecDeque, net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket}, time::SystemTime};
 
-use crate::{grid_cell::*, network::GameEvent};
+use crate::{grid_cell::*, network::{GameEvent,StartClient},GameState};
 // use crate::player::
 use bevy::{ecs::entity, prelude::*, utils::info, window::PrimaryWindow};
 use bevy_quinnet::{client::{certificate::CertificateVerificationMode, connection::ClientEndpointConfiguration, QuinnetClient, QuinnetClientPlugin}, shared::channels::ChannelsConfiguration};
 
 use super::{ReceiveEventQueue, SendEventQueue};
 
-pub struct ClientPlugin{
-    this_player:ThisPlayer
-}
+pub struct ClientPlugin;
 impl ClientPlugin {
-    pub fn new(state:CellState) -> ClientPlugin{
-        ClientPlugin { this_player: ThisPlayer(state) }
-    }
 }
 
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(QuinnetClientPlugin::default())
-        .insert_resource(self.this_player)
+        .insert_resource(ThisPlayer(CellState::Empty))
         .insert_resource(ReceiveEventQueue(VecDeque::new()))
         .insert_resource(SendEventQueue(VecDeque::new()))
         .insert_resource(AvailableGrid(None))
         .insert_state(CurrentPlayer::O)
-        .add_systems(Startup, start_connection)
-        .add_systems(Update, (handle_mouse_clicks,send_messages_to_server).chain())
-        .add_systems(Update, (receive_server_messages,(occupy_cell,prevent_available_grid_lock).chain()));
+        .add_systems(Update, start_connection.run_if(in_state(GameState::Connecting)))
+        .add_systems(Update, (handle_mouse_clicks,send_messages_to_server).chain().run_if(in_state(GameState::InGame)))
+        .add_systems(Update, (receive_server_messages,(occupy_cell,prevent_available_grid_lock).chain()).run_if(in_state(GameState::InGame)));
     }
 }
 #[derive(Resource,Clone, Copy)]
@@ -156,11 +151,33 @@ fn occupy_cell (
 
 
 /// Start connection with server
-fn start_connection(mut client: ResMut<QuinnetClient>) {
-    let _ = client
+fn start_connection(
+    mut client: ResMut<QuinnetClient>,
+    client_mode_info: Res<State<StartClient>>,
+    mut next_game_state: ResMut<NextState<GameState>>,
+    mut this_player: ResMut<ThisPlayer>,
+) {
+    if client.is_connected() 
+    {
+        info!("successfully created connection to server");
+        next_game_state.set(GameState::StartingGame);
+    } else if client.connections().count() == 0 {
+        info!("attempting to create connection to server");
+        // setting this player cell type according to client type
+        *this_player = match client_mode_info.get() {
+            StartClient::Server => ThisPlayer(CellState::X),
+            StartClient::Client(_) => ThisPlayer(CellState::O),
+            _ => panic!("UNEXPECTED BEHAVIOR AAAAAAAAAAAAA")
+        };
+
+        let _ = client
         .open_connection(
             ClientEndpointConfiguration::from_ips(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                IpAddr::V4(match client_mode_info.get() {
+                    StartClient::Client(addr) => addr.clone(),
+                    StartClient::Server => Ipv4Addr::new(127, 0, 0, 1),
+                    _ => todo!()
+                }),
                 6000,
                 IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 0,
@@ -168,6 +185,8 @@ fn start_connection(mut client: ResMut<QuinnetClient>) {
             CertificateVerificationMode::SkipVerification,
             ChannelsConfiguration::default(),
         );
+    }
+    
     
 }
 
