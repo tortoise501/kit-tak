@@ -82,7 +82,7 @@ impl CurrentPlayer {
 }
 
 #[derive(Resource)]
-struct AvailableGrid(Option<IVec2>);
+pub struct AvailableGrid(pub Option<IVec2>);
 
 /// Prevents situations when player doesn't have valid cells to click because grid is filled
 fn prevent_available_grid_lock (

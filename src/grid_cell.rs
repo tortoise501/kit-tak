@@ -1,5 +1,6 @@
 use bevy::{ecs::query, math::vec3, prelude::*, window::PrimaryWindow};
 use serde::{Deserialize, Serialize};
+use crate::network::client::AvailableGrid;
 use crate::GameState;
 
 pub struct  CellGridPlugin;
@@ -104,12 +105,37 @@ fn finish_grid_initializing(
 }
 
 /// Updates cells flagged with update flag
-fn update_cell_textures(mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut UpdateState)>,cell_spawner:Res<GridCellCreator>){
+fn update_cell_textures(
+    mut cell_query: Query<(&mut Handle<Image>,&Cell,&mut UpdateState),Without<Grid>>,
+    mut gridcell_query: Query<(&mut Handle<Image>,&Cell),With<Grid>>,
+    cell_spawner:Res<GridCellCreator>,
+    next_grid_pos: Res<AvailableGrid>,
+){
     for (mut texture,cell,mut update) in &mut cell_query{
         if update.0 {
             *texture = cell_spawner.get_texture(cell.state);
             update.0 = false;
         }
+    }
+    for (mut texture,cell) in &mut gridcell_query{
+        *texture = match cell.state {
+            CellState::X => cell_spawner.get_texture(cell.state),
+            CellState::O => cell_spawner.get_texture(cell.state),
+            _ => {
+                if let Some(pos) = next_grid_pos.0 {
+                    info!("found one");
+                    if pos == cell.pos{
+                        info!("turning one");
+                        cell_spawner.next_grid_texture.clone()
+                    }
+                    else {
+                        cell_spawner.grid_texture.clone()
+                    }
+                }else {
+                    cell_spawner.grid_texture.clone()
+                }
+            },
+        };
     }
 }
 
@@ -131,13 +157,6 @@ fn validate_gridcells(
             }
         }
         for i in 0..3 {
-            if cell.state != CellState::Empty {
-                commands.entity(grid).insert(UpdateState(true));
-                // commands.entity(grid).remove::<Grid>();
-                info!("well idk something");
-                break;
-            }
-
             let mut vertical_count = (0,state_map[i][0]);
             let mut horizontal_count = (0,state_map[0][i]);
             let mut diagonal_count = (0,state_map[1][1]);
@@ -159,15 +178,17 @@ fn validate_gridcells(
             }
             if vertical_count.0 == 3 {
                 cell.state = vertical_count.1;
-            }
-            else if horizontal_count.0 == 3 {
+
+            } else if horizontal_count.0 == 3 {
                 cell.state = horizontal_count.1;
-            }
-            else if diagonal_count.0 == 3 {
+            } else if diagonal_count.0 == 3 {
                 cell.state = diagonal_count.1;
-            }
-            else if diagonal_count_rev.0 == 3 {
+            } else if diagonal_count_rev.0 == 3 {
                 cell.state = diagonal_count_rev.1;
+            }
+            if cell.state != CellState::Empty {
+                info!("filled gridcell");
+                break;
             }
         }
         if cell.state != CellState::Empty{
@@ -189,10 +210,11 @@ fn initialize_cell_creator(asset_server:Res<AssetServer>,mut commands: Commands)
 /// Creates cells and grids 
 #[derive(Resource)]
 struct GridCellCreator{
-    x_texture:Handle<Image>,
-    o_texture:Handle<Image>,
-    empty_texture:Handle<Image>,
-    grid_texture:Handle<Image>
+    pub x_texture:Handle<Image>,
+    pub o_texture:Handle<Image>,
+    pub empty_texture:Handle<Image>,
+    pub grid_texture:Handle<Image>,
+    pub next_grid_texture:Handle<Image>,
 }
 
 impl GridCellCreator {
@@ -212,6 +234,7 @@ impl GridCellCreator {
             o_texture: asset_server.load("cell_O.png"),
             empty_texture: asset_server.load("cell_empty.png"),
             grid_texture: asset_server.load("grid.png"),
+            next_grid_texture: asset_server.load("next_grid.png"),
         }
     }
     /// Creates CellBundle 
