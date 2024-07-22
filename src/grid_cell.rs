@@ -1,6 +1,6 @@
 use bevy::{ecs::query, math::vec3, prelude::*, window::PrimaryWindow};
 use serde::{Deserialize, Serialize};
-use crate::network::client::AvailableGrid;
+use crate::network::client::{AvailableGrid,Winner};
 use crate::GameState;
 
 pub struct  CellGridPlugin;
@@ -8,7 +8,7 @@ pub struct  CellGridPlugin;
 impl Plugin for CellGridPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (initialize_cell_creator,spawn_grid,finish_grid_initializing).chain().run_if(in_state(GameState::StartingGame)))
-            .add_systems(Update, (update_cell_textures,validate_gridcells).run_if(in_state(GameState::InGame)));
+            .add_systems(Update, (update_cell_textures,validate_gridcells,validate_main_grid).run_if(in_state(GameState::InGame)));
     }
 }
 
@@ -123,9 +123,7 @@ fn update_cell_textures(
             CellState::O => cell_spawner.get_texture(cell.state),
             _ => {
                 if let Some(pos) = next_grid_pos.0 {
-                    info!("found one");
                     if pos == cell.pos{
-                        info!("turning one");
                         cell_spawner.next_grid_texture.clone()
                     }
                     else {
@@ -199,7 +197,55 @@ fn validate_gridcells(
     }
 }
 
+fn validate_main_grid(
+    mut main_grid: Query<(Entity,&Children),With<MainGrid>>,
+    cell_q: Query<&Cell,With<Grid>>,
+    mut commands: Commands,
+    mut winner: ResMut<Winner>
+){
+    let (mut grid_entity, mut children) = main_grid.get_single_mut().unwrap();
+    let mut state_map = [[CellState::Empty;3];3];
+    for child in children {
+        let cell = cell_q.get(*child);
+        if let Ok(cell) = cell{
+            state_map[(cell.pos.x + 1) as usize][(cell.pos.y + 1) as usize] = cell.state;
+        }
+    }
+    for i in 0..3 {
+        let mut vertical_count = (0,state_map[i][0]);
+        let mut horizontal_count = (0,state_map[0][i]);
+        let mut diagonal_count = (0,state_map[1][1]);
+        let mut diagonal_count_rev = (0,state_map[1][1]);
 
+        for j in 0..3 {
+            if state_map[i][j] != CellState::Empty && state_map[i][j] == vertical_count.1 {
+                vertical_count.0 +=1;
+            }
+            if state_map[j][i] != CellState::Empty && state_map[j][i] == horizontal_count.1 {
+                horizontal_count.0 +=1;
+            }
+            if state_map[j][j] != CellState::Empty && state_map[j][j] == diagonal_count.1 {
+                diagonal_count.0 +=1;
+            }
+            if state_map[j][2-j] != CellState::Empty && state_map[j][2-j] == diagonal_count_rev.1 {
+                diagonal_count_rev.0 +=1;
+            }
+        }
+        if vertical_count.0 == 3 {
+            winner.0 = Some(vertical_count.1)
+        } else if horizontal_count.0 == 3 {
+            winner.0 = Some(horizontal_count.1)
+        } else if diagonal_count.0 == 3 {
+            winner.0 = Some(diagonal_count.1)
+        } else if diagonal_count_rev.0 == 3 {
+            winner.0 = Some(diagonal_count_rev.1)
+        }
+        if winner.0.is_some() {
+            info!("filled main grid");
+            break;
+        }
+    }
+}
 
 /// Creates resource used to spawn cells more efficiently 
 fn initialize_cell_creator(asset_server:Res<AssetServer>,mut commands: Commands){

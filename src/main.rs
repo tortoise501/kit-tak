@@ -37,5 +37,6 @@ pub enum GameState{
     Connecting,
     StartingGame,
     InGame,
+    FinishingGame
     //...TODO
 }

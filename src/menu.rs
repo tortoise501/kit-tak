@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, time::{Duration, SystemTime}};
 
 use bevy::{prelude::*, utils::info};
 use bevy_quinnet::server;
@@ -12,12 +12,40 @@ impl Plugin for MenuPlugin {
         app
         .insert_state(ClientMode::Client("".to_string()))
         .insert_state(StartClient::None)
+        .insert_state(FinishTimer::None)
         .add_plugins(EguiPlugin)
-        .add_systems(Update, (ui_example_system,start_system).run_if(in_state(GameState::InMenu)));
+        .add_systems(Update, (menu_ui_system,start_system).run_if(in_state(GameState::InMenu)))
+        .add_systems(Update, finish_game.run_if(in_state(GameState::FinishingGame)));
     }
 }
 
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
+enum FinishTimer {
+    None,
+    Finishing(SystemTime)
+}
 
+fn finish_game(
+    finish_timer: ResMut<State<FinishTimer>>,
+    mut next_finish_timer: ResMut<NextState<FinishTimer>>,
+    mut next_start_state:ResMut<NextState<StartClient>>,
+    mut next_client_mode:ResMut<NextState<ClientMode>>,
+    mut next_game_state:ResMut<NextState<GameState>>,
+){
+    match finish_timer.get() {
+        FinishTimer::None => {
+            next_start_state.set(StartClient::None);
+            next_client_mode.set(ClientMode::Client("".to_string()));
+            next_finish_timer.set(FinishTimer::Finishing(SystemTime::now()));
+        },
+        FinishTimer::Finishing(start_time) => {
+            if SystemTime::now().duration_since(*start_time).unwrap() > Duration::from_secs(2){
+                next_finish_timer.set(FinishTimer::None);
+                next_game_state.set(GameState::InMenu);
+            }
+        },
+    }
+}
 
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
@@ -26,7 +54,7 @@ enum ClientMode {
     Client(String)
 }
 
-fn ui_example_system(
+fn menu_ui_system(
     mut contexts: EguiContexts,
     current_client_mode:Res<State<ClientMode>>, 
     mut next_client_mode:ResMut<NextState<ClientMode>>, 

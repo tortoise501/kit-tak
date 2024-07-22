@@ -16,7 +16,8 @@ impl Plugin for ServerPlugin {
             start_listening.run_if(in_state(GameState::CreatingServer).and_then(in_state(StartClient::Server))))
         .add_systems(
             Update, 
-            handle_client_messages.run_if(in_state(GameState::InGame).and_then(in_state(StartClient::Server))));
+            handle_client_messages.run_if(in_state(GameState::InGame).and_then(in_state(StartClient::Server))))
+        .add_systems(Update, stop_server.run_if(in_state(GameState::FinishingGame)));
     }
 }
 
@@ -54,4 +55,10 @@ fn handle_client_messages(
             endpoint.broadcast_message(message.1);
         }
     }
+}
+
+fn stop_server(
+    mut server: ResMut<QuinnetServer>,
+){
+    server.stop_endpoint();
 }

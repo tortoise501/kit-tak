@@ -4,6 +4,8 @@ use crate::{grid_cell::*, network::{GameEvent,StartClient},GameState};
 // use crate::player::
 use bevy::{ecs::entity, prelude::*, utils::info, window::PrimaryWindow};
 use bevy_quinnet::{client::{certificate::CertificateVerificationMode, connection::ClientEndpointConfiguration, QuinnetClient, QuinnetClientPlugin}, shared::channels::ChannelsConfiguration};
+use bevy_egui::{egui::{self, Align2, Color32}, EguiContexts, EguiPlugin};
+
 
 use super::{ReceiveEventQueue, SendEventQueue};
 
@@ -18,10 +20,13 @@ impl Plugin for ClientPlugin {
         .insert_resource(ReceiveEventQueue(VecDeque::new()))
         .insert_resource(SendEventQueue(VecDeque::new()))
         .insert_resource(AvailableGrid(None))
+        .insert_resource(Winner(None))
         .insert_state(CurrentPlayer::O)
         .add_systems(Update, start_connection.run_if(in_state(GameState::Connecting)))
         .add_systems(Update, (handle_mouse_clicks,send_messages_to_server).chain().run_if(in_state(GameState::InGame)))
-        .add_systems(Update, (receive_server_messages,(occupy_cell,prevent_available_grid_lock).chain()).run_if(in_state(GameState::InGame)));
+        .add_systems(Update, (receive_server_messages,(occupy_cell,prevent_available_grid_lock).chain()).run_if(in_state(GameState::InGame)))
+        .add_systems(Update, game_ui_system.run_if(in_state(GameState::InGame)))
+        .add_systems(Update, clear_game.run_if(in_state(GameState::FinishingGame)));
     }
 }
 #[derive(Resource,Clone, Copy)]
@@ -35,9 +40,12 @@ fn handle_mouse_clicks(
     cell_q: Query<(Entity, &Cell, &GlobalTransform), Without<Grid>>,
     mut send_event_queue: ResMut<SendEventQueue>,
     current_player: Res<State<CurrentPlayer>>,
-    this_player:Res<ThisPlayer>
+    this_player:Res<ThisPlayer>,
+    winner: Res<Winner>,
 ) {
-
+    if let Some(_) = winner.0 {
+        return;
+    }
     if current_player.to_state() != this_player.0 {
         return;
     }
@@ -80,6 +88,9 @@ impl CurrentPlayer {
         }
     }
 }
+
+#[derive(Resource,Clone, Copy)]
+pub struct Winner(pub Option<CellState>);
 
 #[derive(Resource)]
 pub struct AvailableGrid(pub Option<IVec2>);
@@ -208,3 +219,61 @@ fn receive_server_messages(
         received_event_queue.0.push_back(message.1);
     }
 }
+
+
+
+fn game_ui_system(
+    mut contexts: EguiContexts,
+    winner: Res<Winner>,
+    current_player: Res<State<CurrentPlayer>>,
+    mut next_game_state: ResMut<NextState<GameState>>
+) {
+    egui::Window::new("Game info").anchor(Align2::LEFT_TOP, [0.,0.]).show(contexts.ctx_mut(), |ui| {
+        ui.label(format!("Turn of player: {}",match current_player.get() {
+            CurrentPlayer::X => "X",
+            CurrentPlayer::O => "O",
+        }));
+        match winner.0 {
+            Some(player) => {
+                ui.label(format!("WINNER:{}",match player {
+                    CellState::X => "X",
+                    CellState::O => "O",
+                    _ => "IDK you broke the game"
+                }));
+                if ui.button("Press me to go to menu").clicked() {
+                    next_game_state.set(GameState::FinishingGame);
+                }
+            },
+            None => (),
+        }
+    });
+}
+
+
+
+
+fn clear_game(
+    mut client: ResMut<QuinnetClient>,
+    sprites: Query<Entity,With<Sprite>>,
+    mut commands: Commands,
+    mut this_player: ResMut<ThisPlayer>,
+    mut available_grid: ResMut<AvailableGrid>,
+    mut winner: ResMut<Winner>,
+    mut next_player: ResMut<NextState<CurrentPlayer>>,
+){
+    client.close_all_connections();
+    for entity in &sprites {
+        commands.entity(entity).despawn();
+    }
+    *this_player = ThisPlayer(CellState::Empty);
+    *available_grid = AvailableGrid(None);
+    *winner = Winner(None);
+    next_player.set(CurrentPlayer::O);
+}
+
+// .insert_resource(ThisPlayer(CellState::Empty))
+// .insert_resource(ReceiveEventQueue(VecDeque::new()))
+// .insert_resource(SendEventQueue(VecDeque::new()))
+// .insert_resource(AvailableGrid(None))
+// .insert_resource(Winner(None))
+// .insert_state(CurrentPlayer::O)
